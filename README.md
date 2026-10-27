@@ -71,7 +71,7 @@ The CLI does a dry run (reports only) unless `--write` is given; `--base` swaps 
 Limitations:
 
 * Offline validation is not a render test. Try the result in a disposable VM with a snapshot before using it for real.
-* Win7-only parts (Flip3D, reflection, side highlight) have no Windows 10 counterpart and are dropped.
+* Win7-only parts (Flip3D, the old reflection map) have no Windows 10 counterpart and are dropped. The frame highlights (corner and side) are kept as DWMWindow parts 95 and 96, which Windows ignores; OpenGlass reads them with its highlight style set to "From msstyles".
 * Win10 templates add 192-384 dpi images that a Windows 7 style never had. Where the custom style replaced a part's pictures, those extra slots get its largest picture; parts it left alone keep the template's high-dpi art.
 * Classes that don't exist in the template are reported, not added. Properties the custom style adds on top of stock Windows 7 (text glow, fonts, colors...) are added to the template's matching class.
 * Colors always come from the custom style, even where the template changed them on purpose, and a color the custom style deletes is deleted too. Where a Windows 10 class adds its own value on top of a class the custom style changed (e.g. Explorer's buttons on top of the normal button colors), the custom value is copied into it. Some things Windows 10 draws from a different property than Windows 7 did (navigation pane, file list text, reading pane, status bar, size grip); those get the custom style's Windows 7 value too. Dark-mode colors stay the template's, to match its dark backgrounds. Other conflicts keep the template's value unless `--prefer-source` says otherwise.

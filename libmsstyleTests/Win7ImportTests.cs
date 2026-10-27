@@ -76,7 +76,50 @@ namespace libmsstyleTests
             Assert.AreEqual(0, r.Resources.Count);
             Assert.AreEqual(r.Dwm.TemplateAtlasId, r.Dwm.NewAtlasId);
             Assert.AreEqual(0, r.Dwm.FallbackParts.Count);
-            CollectionAssert.AreEqual(Variant(Aero11), Variant(output));
+            // the only addition: win7's highlight parts, kept under DWMWindow 95/96 for DWM mods.
+            Assert.AreEqual(2, r.Counts["dwm-highlight-kept"]);
+            using (var t = new VisualStyle())
+            using (var o = new VisualStyle())
+            {
+                t.Load(Aero11);
+                o.Load(output);
+                var tm = new SemanticModel(t);
+                var om = new SemanticModel(o);
+                bool Highlight(SemanticEntry e) => e.ClassName == "DWMWindow" && (e.PartId == 95 || e.PartId == 96);
+                Assert.AreEqual(0, tm.Entries.Count(Highlight));
+                var rest = om.Entries.Where(e => !Highlight(e)).ToList();
+                Assert.AreEqual(tm.Entries.Count, rest.Count);
+                foreach (var e in rest)
+                    Assert.AreEqual(tm.ByKey[e.Key].RawValue, e.RawValue, e.Key);
+            }
+        }
+
+        [TestMethod]
+        public void Win7HighlightPartsAreKeptUnderFreeDwmIds()
+        {
+            // win7's LEFTHIGHLIGHTCORNER (34) and SIDEHIGHLIGHT (43) have no win10 consumer and their ids
+            // belong to other parts there. they're kept as 95/96, with the rect, frame count, margins and
+            // per-state opacities OpenGlass reads.
+            string output = Path.Combine(m_dir, "highlights.msstyles");
+            var r = Win7StyleImporter.Run(new Win7ImportOptions { SourcePath = W7Aero, TemplatePath = Aero11, OutputPath = output, DryRun = false });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, r.Status, string.Join("\n", r.Errors));
+            using (var w7 = new VisualStyle())
+            using (var o = new VisualStyle())
+            {
+                w7.Load(W7Aero);
+                o.Load(output);
+                var wm = new SemanticModel(w7);
+                var om = new SemanticModel(o);
+                foreach (var (name, id) in new[] { ("LEFTHIGHLIGHTCORNER", 95), ("SIDEHIGHLIGHT", 96) })
+                {
+                    var src = wm.Entries.Where(e => e.ClassName == "DWMWindow" && e.PartName == name).ToList();
+                    var kept = om.Entries.Where(e => e.ClassName == "DWMWindow" && e.PartId == id).ToList();
+                    Assert.IsTrue(src.Count > 0, name);
+                    Assert.AreEqual(src.Count, kept.Count, name);
+                    foreach (var se in src)
+                        Assert.AreEqual(se.RawValue, kept.Single(k => k.StateId == se.StateId && k.NameId == se.NameId).RawValue, $"{name} S{se.StateId} {se.PropertyName}");
+                }
+            }
         }
 
         // The win7 and win10 DWMWindow part tables number parts differently. Aero11 kept the stock

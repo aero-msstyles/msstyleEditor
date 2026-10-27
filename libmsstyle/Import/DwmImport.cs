@@ -198,8 +198,10 @@ namespace libmsstyle.Import
             }
 
             BuildAtlas(plans, ta, sa, tAtlas, sAtlas);
+            var keptHighlights = PreserveHighlights(s, sAtlas);
 
             var usedSrc = new HashSet<string>(srcOfPart.Values, StringComparer.OrdinalIgnoreCase);
+            usedSrc.UnionWith(keptHighlights);
             foreach (var bp in b.Values.Where(p => p.Id != 0 && !usedSrc.Contains(p.Name)).OrderBy(p => p.Id))
             {
                 m_rep.Win7OnlyParts.Add(bp.Name);
@@ -211,6 +213,76 @@ namespace libmsstyle.Import
                 if (changed)
                     report.Notes.Add($"DWMWindow {bp.Name}: source customized a win7-only part (no win10 consumer); dropped.");
             }
+        }
+
+        /// <summary>
+        /// win7's frame highlights have no win10 consumer, and their win7 ids (34, 43) belong to other
+        /// parts on win10, so they're kept under ids past everything uDWM asks for: 92-94 already carry
+        /// the button glows for DWM mods, 95/96 carry the highlights. OpenGlass reads them there when its
+        /// highlight style is "From msstyles" (its LEFTHIGHLIGHTCORNERid / SIDEHIGHLIGHTid defaults).
+        /// </summary>
+        internal static readonly IReadOnlyDictionary<string, int> HighlightParts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["LEFTHIGHLIGHTCORNER"] = 95,
+            ["SIDEHIGHLIGHT"] = 96,
+        };
+
+        /// <summary>
+        /// Copies the source's highlight parts into the template's DWMWindow under the ids above. The
+        /// output atlas starts with the source atlas at 0,0, so the source rects stay valid as they are.
+        /// A template that already uses one of those ids keeps it; that part is skipped with a warning.
+        /// </summary>
+        private List<string> PreserveHighlights(Dictionary<string, PartData> s, ArgbImage sAtlas)
+        {
+            var report = m_imp.Report;
+            var kept = new List<string>();
+            var cls = m_imp.Target.Style.Classes.Values.FirstOrDefault(c => string.Equals(c.ClassName, Win7StyleImporter.DwmClass, StringComparison.OrdinalIgnoreCase));
+            if (cls == null) return kept;
+            foreach (var kv in HighlightParts)
+            {
+                if (!s.TryGetValue(kv.Key, out var sp)) continue;
+                if (KeyPattern.Matches(m_imp.Options.Exclude, Win7StyleImporter.DwmClass, kv.Key, "*")) continue;
+                if (cls.Parts.ContainsKey(kv.Value))
+                {
+                    report.Warnings.Add($"DWMWindow {kv.Key}: the template already has a part {kv.Value}, so the win7 highlight isn't kept there.");
+                    continue;
+                }
+                var rect = sp.Rects.FirstOrDefault(e => e.StateId == 0);
+                if (rect == null) continue;
+                var r = RectOf(rect);
+                if (r.Width <= 0 || r.Height <= 0 || r.Right > sAtlas.Width || r.Bottom > sAtlas.Height) continue;
+
+                var part = new StylePart { PartId = kv.Value, PartName = "Part " + kv.Value };
+                cls.Parts.Add(kv.Value, part);
+                foreach (var se in sp.Entries.OrderBy(e => e.StateId))
+                {
+                    if (!part.States.TryGetValue(se.StateId, out var st))
+                    {
+                        st = new StyleState { StateId = se.StateId, StateName = "State " + se.StateId };
+                        part.States.Add(se.StateId, st);
+                    }
+                    var prop = new StyleProperty((PropertyHeader)se.Property.Header.Clone());
+                    prop.Header.classID = cls.ClassId;
+                    prop.Header.partID = kv.Value;
+                    Win7StyleImporter.CopyValue(se.Property, prop);
+                    st.Properties.Add(prop);
+                    m_imp.MarkTouched(prop, $"DWMWindow|Part {kv.Value}|S{se.StateId}|{se.PropertyName}");
+                    m_imp.AddedRecords.Add($"{cls.ClassId}/{kv.Value}/{se.StateId}/{prop.Header.nameID}/{prop.Header.typeID}");
+                }
+                m_imp.SpriteChecks.Add(new SpriteExpectation { Part = "Part " + kv.Value, OutputRect = r, Expected = sAtlas.Crop(r) });
+                m_rep.Parts.Add(new DwmPartMapping
+                {
+                    TargetPartId = kv.Value,
+                    TargetPart = "Part " + kv.Value,
+                    SourcePart = kv.Key,
+                    Method = "kept-win7-part",
+                    NewRect = r.ToString(),
+                    Note = "win7-only part kept for DWM mods (OpenGlass highlight style \"From msstyles\")"
+                });
+                report.Count("dwm-highlight-kept");
+                kept.Add(kv.Key);
+            }
+            return kept;
         }
 
         private void ResolveSource(RectPlan plan, Dictionary<string, PartData> b, Dictionary<string, PartData> s, ArgbImage sAtlas)
