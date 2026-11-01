@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -12,6 +13,37 @@ namespace libmsstyle.Import
     public static class Win7StockAero
     {
         private const string ResourceName = "libmsstyle.Import.w7_aero.msstyles";
+
+        /// <summary>
+        /// The font strings from stock windows 7's en-US aero.msstyles.mui. The embedded style is a
+        /// lone .msstyles, so VisualStyle.Load can't resolve them. Without the text, a font whose
+        /// string id is unchanged (8.x reuses ids, and a custom mui can rewrite the text behind an
+        /// id) looks identical to stock and the import silently drops it.
+        /// </summary>
+        private static readonly Dictionary<int, string> StockFontStrings = new Dictionary<int, string>
+        {
+            { 501, "Segoe UI, 9, Quality:ClearType" },
+            { 502, "Segoe UI, 12, Quality:ClearType" },
+            { 503, "Segoe UI, 9, Bold, Quality:ClearType" },
+            { 504, "Segoe UI, 9, Underline, Quality:ClearType" },
+            { 505, "Segoe UI, 12, Underline, Quality:ClearType" },
+            { 506, "Segoe UI, 10, Quality:ClearType" },
+            { 507, "Segoe UI, 9, Italic, Quality:ClearType" },
+        };
+
+        /// <summary>
+        /// Gives the embedded base the font table its .mui would have provided. Call this only for
+        /// the built-in base: a user-supplied base loads its own companion .mui.
+        /// </summary>
+        public static void AddStockFontStrings(VisualStyle style)
+        {
+            if (style == null) throw new ArgumentNullException(nameof(style));
+            if (style.StringTables.Any(t => t.Value.Count > 0)) return;
+
+            var table = new Dictionary<int, string>(StockFontStrings);
+            style.StringTables[1033] = table; // en-US, the only language stock aero ships
+            foreach (var kv in table) style.PreferredStringTable[kv.Key] = kv.Value;
+        }
 
         public static string GetPath()
         {

@@ -51,7 +51,8 @@ namespace libmsstyle.Import
             string candidate = null;
             try
             {
-                if (string.IsNullOrEmpty(m_opt.BasePath)) m_opt.BasePath = Win7StockAero.GetPath();
+                bool builtInBase = string.IsNullOrEmpty(m_opt.BasePath);
+                if (builtInBase) m_opt.BasePath = Win7StockAero.GetPath();
                 CheckPaths();
                 using (var baseStyle = new VisualStyle())
                 using (var sourceStyle = new VisualStyle())
@@ -59,7 +60,9 @@ namespace libmsstyle.Import
                 using (var targetInv = new ResourceInventory(m_opt.TemplatePath))
                 {
                     LoadChecked(baseStyle, m_opt.BasePath, "base", Platform.Win7);
-                    LoadChecked(sourceStyle, m_opt.SourcePath, "source", Platform.Win7);
+                    // the embedded base has no .mui, so its fonts would otherwise only compare by id.
+                    if (builtInBase) Win7StockAero.AddStockFontStrings(baseStyle);
+                    LoadChecked(sourceStyle, m_opt.SourcePath, "source", Platform.Win7, allowWin8: true);
                     LoadChecked(target, m_opt.TemplatePath, "template", Platform.Win10);
                     if (r.Errors.Count > 0)
                     {
@@ -71,7 +74,7 @@ namespace libmsstyle.Import
                     m_target = new SemanticModel(target);
                     if (baseStyle.StringTables.All(t => t.Value.Count == 0))
                     {
-                        // stock win7 keeps its strings in a .mui that isn't shipped with the file.
+                        // a custom --base without a companion .mui; the built-in base gets its fonts above.
                         r.Notes.Add("base style has no string table, so string/font properties are compared by id: a source that edits the text of an unchanged id isn't detected.");
                     }
 
@@ -193,19 +196,26 @@ namespace libmsstyle.Import
             Directory.CreateDirectory(outDir);
         }
 
-        private void LoadChecked(VisualStyle style, string path, string role, Platform expected)
+        private void LoadChecked(VisualStyle style, string path, string role, Platform expected, bool allowWin8 = false)
         {
             style.Load(path);
             foreach (var d in style.LoadDiagnostics)
             {
                 m_report.Errors.Add($"{role} \"{path}\" has property stream damage: {d}");
             }
+            // Windows 8.x styles are close enough to Windows 7 to use the same stock aero base:
+            // 8.0/8.1 only removed things the three-way merge treats as absent. Anything newer is
+            // still refused, because it no longer shares the base's records. Only the source can be
+            // an 8.x style; the base stays stock Windows 7 so every source is compared to the same
+            // common ancestor.
+            bool isWin8Source = allowWin8 && (style.Platform == Platform.Win8 || style.Platform == Platform.Win81);
             bool ok = expected == Platform.Win7
-                ? style.Platform == Platform.Win7 || style.Platform == Platform.Vista
+                ? style.Platform == Platform.Win7 || style.Platform == Platform.Vista || isWin8Source
                 : style.Platform == Platform.Win10 || style.Platform == Platform.Win11;
             if (!ok)
             {
-                m_report.Errors.Add($"{role} \"{path}\" was detected as {style.Platform.ToDisplayString()}, expected {expected.ToDisplayString()}.");
+                string expectedText = allowWin8 ? "Windows 7, 8 or 8.1" : expected.ToDisplayString();
+                m_report.Errors.Add($"{role} \"{path}\" was detected as {style.Platform.ToDisplayString()}, expected {expectedText}.");
             }
             m_report.Notes.Add($"{role}: {style.Platform.ToDisplayString()}, {style.Classes.Count} classes, {style.NumProperties} properties.");
         }

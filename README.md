@@ -48,11 +48,11 @@ On selection of a part, its properties are shown on the right side, grouped by t
 
 Saving the style is done via the menubar. It is recommended to save often, and to a new file, since there is no undo/redo functionality. Also remember to backup your original style and don't work in the "Themes" directory directly (probably no write permission anyways, but still).
 
-## Importing a Windows 7 style (experimental)
+## Importing a Windows 7 or 8.x style (experimental)
 
-Open a Windows 10 style that already works on your machine (e.g. an Aero 7 port), click Extras > Import Win7 Style and pick a custom Windows 7 `.msstyles`. The open style gets the custom style's look, and the result is opened in the editor unsaved, so you can test it, keep editing and save it like any other style.
+Open a Windows 10 style that already works on your machine (e.g. an Aero 7 port), click Extras > Import Win7 Style and pick a custom Windows 7, 8 or 8.1 `.msstyles`. The open style gets the custom style's look, and the result is opened in the editor unsaved, so you can test it, keep editing and save it like any other style.
 
-Stock Windows 7 `aero.msstyles` is built into the editor and used as the reference: only what the custom style changed relative to stock is carried over, and only where the open style still has the stock value. Everything else in the open style (class map, inheritance, animations, dark mode parts, every untouched resource) stays byte for byte. Images are compared by pixels, so a template that re-encoded the stock images still counts as stock.
+Windows 8 and 8.1 styles are accepted as source too, but stock Windows 7 `aero.msstyles` is always the reference: only what the custom style changed relative to stock is carried over, and only where the open style still has the stock value. Parts and properties Windows 8.x no longer ships are absent on the source side and therefore contribute nothing. Everything else in the open style (class map, inheritance, animations, dark mode parts, every untouched resource) stays byte for byte. Images are compared by pixels, so a template that re-encoded the stock images still counts as stock.
 
 DWMWindow (frames, caption buttons, glyphs) is matched by part name, not by part number, because the numbering changed after Windows 7. This only works if the template uses the stock Windows 7 DWM atlas; otherwise the template frames are kept and the report says so. Windows 10 parts without a Windows 7 counterpart (dark glyphs, extra caption backgrounds) follow the stock sprite they pointed at. Sprites that can't be traced keep the template's pixels.
 
@@ -78,7 +78,7 @@ Limitations:
 * Apply a complete `.theme` when checking system-color controls. Loading only the `.msstyles` can leave the previous theme's system palette active. The importer preserves source rendering, including plain labels that are already black on dark backgrounds on Windows 7; it does not invent replacement colors for those.
 * A picture the template redrew still comes from the custom style when the part uses the custom style's frame count and margins, since that's what those numbers describe.
 * Removals never leave a class without records: Windows only registers classes that have records and the class inheritance table counts them in order, so an emptied class breaks inheritance for every class after it (fonts falling back to the System font, for one). Such a color keeps the value the deletion would have fallen back to instead.
-* Fonts are compared by what they parse to, not their spelling. A font the template doesn't have is added to its string tables, which means the result is saved with the strings inside the `.msstyles`. A font string Windows would reject (an unknown style word fails the whole theme) is never written, and a caption/menu font taller than its bar blocks the result.
+* Fonts are compared by what they parse to, not their spelling, against the stock Windows 7 font table. That catches a source that only rewrote a font string's text (a larger title bar font, for example) while keeping stock's string id. A font the template doesn't have is added to its string tables, which means the result is saved with the strings inside the `.msstyles`. A font string Windows would reject (an unknown style word fails the whole theme) is never written, and a caption/menu font taller than its bar blocks the result.
 * Pictures the template reuses from stock Windows 7 elsewhere (dark mode classes, extra DPI sizes, shared image ids) get the custom style's version too, unless the custom style gave the parts that shared that picture different looks.
 
 ## Contributors

@@ -1355,6 +1355,7 @@ namespace libmsstyle
                         {
                             return VisualStyleParts.PARTS_DWMWINDOW_WIN7;
                         }
+                    case Platform.Win8:
                     case Platform.Win81:
                         {
                             return VisualStyleParts.PARTS_DWMWINDOW_WIN81;

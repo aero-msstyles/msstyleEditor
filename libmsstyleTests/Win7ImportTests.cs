@@ -13,6 +13,7 @@ namespace libmsstyleTests
     public class Win7ImportTests
     {
         const string W7Aero = @"..\..\..\styles\w7_aero.msstyles";
+        const string Win81Aero = @"..\..\..\styles\w81_aero.msstyles";
         const string Aero11 = @"..\..\..\styles\aero11_7_clear.msstyles";
 
         // Shine 2.0 isn't redistributable, so it isn't in the repo. Point MSSTYLE_SHINE at it to run those tests.
@@ -92,6 +93,113 @@ namespace libmsstyleTests
                 foreach (var e in rest)
                     Assert.AreEqual(tm.ByKey[e.Key].RawValue, e.RawValue, e.Key);
             }
+        }
+
+        [TestMethod]
+        public void Win81SourceUsesTheWin81DwmPartTable()
+        {
+            // Windows 8.x shares the Win7 base closely enough to be a source: it only dropped parts
+            // (no glows, highlights, Flip3D or old reflection map), which the three-way merge already
+            // treats as absent. The base itself must stay stock Windows 7 (see Win8BaseIsStillRefused).
+            string output = Path.Combine(m_dir, "win81.msstyles");
+            var r = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win81Aero,
+                TemplatePath = Aero11,
+                OutputPath = output,
+                DryRun = false
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, r.Status, string.Join("\n", r.Errors));
+            Assert.IsTrue(r.Notes.Any(n => n.StartsWith("source: Windows 8.1")), string.Join("\n", r.Notes));
+            Assert.IsTrue(r.Dwm.TemplateAtlasIsStockWin7);
+
+            // the parts Windows 8 dropped have no source sprite, so nothing is kept for mods either.
+            CollectionAssert.AreEquivalent(new[]
+            {
+                "BUTTONCLOSEGLOW", "BUTTONGLOW", "LEFTHIGHLIGHTCORNER",
+                "FLIP3DBOTTOMFRAME", "FLIP3DLEFTFRAME", "FLIP3DRIGHTFRAME", "FLIP3DTOPFRAME",
+                "REFLECTIONMAP", "SIDEHIGHLIGHT", "SMALLBUTTONCLOSEGLOW"
+            }, r.Dwm.Win7OnlyParts);
+            Assert.IsFalse(r.Counts.ContainsKey("dwm-highlight-kept"));
+
+            // the template's Win10 part 11 is BUTTONCLOSEGLYPH96; the source calls it part 12.
+            var close = r.Dwm.Parts.Single(p => p.TargetPart == "BUTTONCLOSEGLYPH96");
+            Assert.AreEqual("BUTTONCLOSEGLYPH96", close.SourcePart);
+            Assert.AreEqual("name", close.Method);
+
+            Assert.IsTrue(File.Exists(output));
+            using (var o = new VisualStyle())
+            {
+                o.Load(output);
+                Assert.AreEqual(0, o.LoadDiagnostics.Count, string.Join("\n", o.LoadDiagnostics));
+                var om = new SemanticModel(o);
+                Assert.IsFalse(om.Entries.Any(e => e.ClassName == "DWMWindow" && (e.PartId == 95 || e.PartId == 96)),
+                    "removed 8.x highlights must not be invented");
+            }
+        }
+
+        [TestMethod]
+        public void FontTextBehindAnUnchangedStringIdIsImported()
+        {
+            // stock win7 and 8.x both point sysmetrics CAPTIONFONT at string 501, but this source
+            // rewrote that string to 11pt. The embedded base has no .mui, so without its stock
+            // font text the unchanged id made the larger caption font look unchanged too.
+            string source = Path.Combine(m_dir, "caption11.msstyles");
+            using (var s = new VisualStyle())
+            {
+                s.Load(Win81Aero);
+                var table = new Dictionary<int, string> { { 501, "Segoe UI, 11, Quality:ClearType" } };
+                s.StringTables[1033] = table;
+                foreach (var kv in table) s.PreferredStringTable[kv.Key] = kv.Value;
+                s.Save(source, makeStandalone: true);
+            }
+
+            string output = Path.Combine(m_dir, "out", "caption11-out.msstyles");
+            var r = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = source,
+                TemplatePath = Aero11,
+                OutputPath = output,
+                DryRun = false
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, r.Status, string.Join("\n", r.Errors));
+
+            using (var o = new VisualStyle())
+            {
+                o.Load(output);
+                var m = new SemanticModel(o);
+                foreach (var prop in new[] { "CAPTIONFONT", "SMALLCAPTIONFONT" })
+                {
+                    var e = m.Entries.Single(x => x.ClassName == "sysmetrics" && x.PropertyName == prop);
+                    Assert.IsTrue(e.Value.StartsWith("str:"), prop + ": " + e.Value);
+                    Assert.AreEqual(11, FontSpec.Parse(e.Value.Substring(4)).Points, prop);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Win8BaseIsStillRefused()
+        {
+            // only the source may be 8.x; a custom base has to remain the stock Windows 7 aero.
+            var r = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = W7Aero,
+                BasePath = Win81Aero,
+                TemplatePath = Aero11,
+                DryRun = true
+            });
+            Assert.AreEqual(ImportStatus.Blocked, r.Status);
+            Assert.IsTrue(r.Errors.Any(e => e.Contains("base") && e.Contains("expected Windows 7")), string.Join("\n", r.Errors));
+        }
+
+        [TestMethod]
+        public void Win8UsesTheWin81DwmPartTable()
+        {
+            // before 8.1 the table uses the same ids as 8.1; the Windows 10 table is off by one there.
+            var names = SemanticModel.PartNames("DWMWindow", Platform.Win8);
+            Assert.AreEqual("BUTTONCLOSEGLYPH96", names[12]);
+            Assert.AreEqual("BUTTONHELPGLYPH96", names[16]);
+            Assert.AreEqual("THUMBNAILBORDER", names[64]);
         }
 
         [TestMethod]
