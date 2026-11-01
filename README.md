@@ -15,7 +15,7 @@ In order to apply the visual styles, your Windows must also be patched with one 
 * can't create styles from scratch
 * can't add new fonts
 * no preview of items in image atlases
-* supports only .png ' s
+* supports only .png's
 
 No abstraction over the internals is done. Things are named and structured as they were by the developers at Microsoft. It may be a bit puzzling at first to figure out what each class/part/property effects. The following chapter might help a bit though.
 
