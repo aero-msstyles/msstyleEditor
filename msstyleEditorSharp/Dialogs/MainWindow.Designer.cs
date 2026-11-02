@@ -215,7 +215,7 @@ namespace msstyleEditor
             this.btImportWin7.MaxSizeMode = System.Windows.Forms.RibbonElementSizeMode.Medium;
             this.btImportWin7.Name = "btImportWin7";
             this.btImportWin7.SmallImage = ((System.Drawing.Image)(resources.GetObject("btFileInfoExport.SmallImage")));
-            this.btImportWin7.Text = "Import Win7 Style";
+            this.btImportWin7.Text = "Import 7/8.x Style";
             this.btImportWin7.Click += new System.EventHandler(this.OnImportWin7Style);
             // 
             // ribbonPanelTheme

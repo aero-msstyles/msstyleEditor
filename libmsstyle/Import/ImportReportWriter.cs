@@ -21,7 +21,7 @@ namespace libmsstyle.Import
         public static string ToMarkdown(ImportReport r)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("# Windows 7 style import report");
+            sb.AppendLine("# Windows 7/8.x style import report");
             sb.AppendLine();
             sb.AppendLine($"Status: **{r.Status}** ({(r.DryRun ? "dry run" : "write")}). {r.StatusText}");
             sb.AppendLine();

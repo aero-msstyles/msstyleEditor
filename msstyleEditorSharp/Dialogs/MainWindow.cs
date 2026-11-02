@@ -1145,12 +1145,12 @@ namespace msstyleEditor
             if (m_style == null || (m_style.Platform != Platform.Win10 && m_style.Platform != Platform.Win11))
             {
                 MessageBox.Show(this, "Open the Windows 10 style to import into first (e.g. an Aero 7 port that already works on your system).",
-                    "Import Windows 7 style", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "Import Windows 7/8.x style", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             string source;
-            using (var ofd = new OpenFileDialog { Title = "Windows 7 style to import", Filter = "Visual Style (*.msstyles)|*.msstyles" })
+            using (var ofd = new OpenFileDialog { Title = "Windows 7/8.x style to import", Filter = "Visual Style (*.msstyles)|*.msstyles" })
             {
                 if (ofd.ShowDialog(this) != DialogResult.OK) return;
                 source = ofd.FileName;
