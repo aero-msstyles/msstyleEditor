@@ -85,6 +85,10 @@
     <EmbeddedResource Include="..\libmsstyleTests\styles\w7_aero.msstyles">
       <LogicalName>libmsstyle.Import.w7_aero.msstyles</LogicalName>
     </EmbeddedResource>
+    <!-- the en-US strings from stock win7's aero.msstyles.mui; these cannot be resolved otherwise. -->
+    <EmbeddedResource Include="..\libmsstyleTests\styles\w7_aero.msstyles.mui">
+      <LogicalName>libmsstyle.Import.w7_aero.msstyles.mui</LogicalName>
+    </EmbeddedResource>
     <Compile Include="Platform.cs" />
     <Compile Include="PropertyStream.cs" />
     <Compile Include="ResourceAccess.cs" />

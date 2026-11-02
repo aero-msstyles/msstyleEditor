@@ -60,8 +60,6 @@ namespace libmsstyle.Import
                 using (var targetInv = new ResourceInventory(m_opt.TemplatePath))
                 {
                     LoadChecked(baseStyle, m_opt.BasePath, "base", Platform.Win7);
-                    // the embedded base has no .mui, so its fonts would otherwise only compare by id.
-                    if (builtInBase) Win7StockAero.AddStockFontStrings(baseStyle);
                     LoadChecked(sourceStyle, m_opt.SourcePath, "source", Platform.Win7, allowWin8: true);
                     LoadChecked(target, m_opt.TemplatePath, "template", Platform.Win10);
                     if (r.Errors.Count > 0)
@@ -74,7 +72,7 @@ namespace libmsstyle.Import
                     m_target = new SemanticModel(target);
                     if (baseStyle.StringTables.All(t => t.Value.Count == 0))
                     {
-                        // a custom --base without a companion .mui; the built-in base gets its fonts above.
+                        // a custom --base without a companion .mui; the built-in base gets its strings from the bundled mui.
                         r.Notes.Add("base style has no string table, so string/font properties are compared by id: a source that edits the text of an unchanged id isn't detected.");
                     }
 
