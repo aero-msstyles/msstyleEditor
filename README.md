@@ -80,6 +80,7 @@ Limitations:
 * Removals never leave a class without records: Windows only registers classes that have records and the class inheritance table counts them in order, so an emptied class breaks inheritance for every class after it (fonts falling back to the System font, for one). Such a color keeps the value the deletion would have fallen back to instead.
 * Fonts are compared by what they parse to, not their spelling, against the stock Windows 7 font table. That catches a source that only rewrote a font string's text (a larger title bar font, for example) while keeping stock's string id. A font the template doesn't have is added to its string tables, which means the result is saved with the strings inside the `.msstyles`. A font string Windows would reject (an unknown style word fails the whole theme) is never written, and a caption/menu font taller than its bar blocks the result.
 * Pictures the template reuses from stock Windows 7 elsewhere (dark mode classes, extra DPI sizes, shared image ids) get the custom style's version too, unless the custom style gave the parts that shared that picture different looks.
+* Importing aerolite.msstyles is currently not fully supported.
 
 ## Contributors
 * [Shomnipotence](https://github.com/Shomnipotence) - New application icon design
