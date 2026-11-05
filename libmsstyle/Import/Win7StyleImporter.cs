@@ -18,6 +18,8 @@ namespace libmsstyle.Import
     public class Win7StyleImporter
     {
         public const string DwmClass = "DWMWindow";
+        /// <summary>the second DWM class Redpill builds ship next to DWMWindow.</summary>
+        public const string RedpillDwmClass = "W8:DWMWindow";
 
         private readonly Win7ImportOptions m_opt;
         private readonly ImportReport m_report = new ImportReport();
@@ -26,6 +28,8 @@ namespace libmsstyle.Import
         private readonly Dictionary<string, ArgbImage> m_decoded = new Dictionary<string, ArgbImage>();
         // properties already rewritten, so the generic pass can't touch DWM records twice.
         private readonly HashSet<StyleProperty> m_touched = new HashSet<StyleProperty>();
+        // the actual source class the DWM pass reads (DWMWindow unless W8:DWMWindow was chosen).
+        private string m_dwmSourceClass = DwmClass;
 
         internal List<SpriteExpectation> SpriteChecks { get; } = new List<SpriteExpectation>();
         internal Dictionary<StyleProperty, string> ChangedProperties { get; } = new Dictionary<StyleProperty, string>();
@@ -38,6 +42,25 @@ namespace libmsstyle.Import
         public static ImportReport Run(Win7ImportOptions options)
         {
             return new Win7StyleImporter(options).Execute();
+        }
+
+        /// <summary>
+        /// true when the style has the second DWM class Redpill builds ship. The editor only asks
+        /// which DWM images to import when this is true; ordinary 7/8.x sources are never prompted.
+        /// </summary>
+        public static bool HasRedpillDwm(VisualStyle style)
+        {
+            return style != null && style.Classes.Values.Any(c =>
+                string.Equals(c.ClassName, RedpillDwmClass, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool HasRedpillDwm(string path)
+        {
+            using (var style = new VisualStyle())
+            {
+                style.Load(path);
+                return HasRedpillDwm(style);
+            }
         }
 
         public ImportReport Execute()
@@ -70,6 +93,7 @@ namespace libmsstyle.Import
                     m_source = new SemanticModel(sourceStyle);
                     m_base = new SemanticModel(baseStyle);
                     m_target = new SemanticModel(target);
+                    SelectDwmSource();
                     if (baseStyle.StringTables.All(t => t.Value.Count == 0))
                     {
                         // a custom --base without a companion .mui; the built-in base gets its strings from the bundled mui.
@@ -131,6 +155,33 @@ namespace libmsstyle.Import
 
         private string m_validationDir;
         private string CompanionSource => string.IsNullOrEmpty(m_opt.CompanionSourcePath) ? m_opt.TemplatePath : m_opt.CompanionSourcePath;
+
+        /// <summary>
+        /// Resolves the DWM source class. Redpill builds keep the old images in DWMWindow and the
+        /// new ones in W8:DWMWindow; the caller can pick either, but only when W8:DWMWindow exists.
+        /// Auto keeps the historical behavior (DWMWindow), so the CLI stays non-interactive.
+        /// </summary>
+        private void SelectDwmSource()
+        {
+            bool hasRedpill = m_source.ClassesByName.ContainsKey(RedpillDwmClass);
+            bool useRedpill = m_opt.DwmSource == DwmSourceChoice.Redpilled && hasRedpill;
+            if (m_opt.DwmSource == DwmSourceChoice.Redpilled && !hasRedpill)
+            {
+                m_report.Warnings.Add($"DWM source \"{RedpillDwmClass}\" was requested, but the source has no such class; using \"{DwmClass}\".");
+            }
+
+            m_dwmSourceClass = useRedpill ? RedpillDwmClass : DwmClass;
+            var d = m_report.Dwm;
+            d.SourceHasRedpillDwm = hasRedpill;
+            d.SourceDwmClass = m_dwmSourceClass;
+            d.SourceDwmChoice = useRedpill
+                ? "redpilled (W8:DWMWindow)"
+                : hasRedpill
+                    ? "unredpilled (DWMWindow; W8:DWMWindow is present but not selected)"
+                    : "DWMWindow (the source has no W8:DWMWindow)";
+            if (hasRedpill)
+                m_report.Notes.Add($"source has both DWMWindow and {RedpillDwmClass}; importing the {d.SourceDwmChoice} images.");
+        }
 
         private ImportReport Finish(string candidate)
         {
@@ -257,6 +308,8 @@ namespace libmsstyle.Import
                 m_source.ByKey.TryGetValue(key, out var s);
                 m_target.ByKey.TryGetValue(key, out var a);
                 var any = b ?? s ?? a;
+                // W8:DWMWindow is the redpill source view; DwmImport consumes it and never merges it as a class.
+                if (string.Equals(any.ClassName, RedpillDwmClass, StringComparison.OrdinalIgnoreCase)) continue;
                 var cats = new List<string>();
                 if (b != null && s != null && !Same(m_base, b, m_source, s)) cats.Add("source-changed");
                 if (b == null && s != null) cats.Add("source-only");
@@ -299,6 +352,7 @@ namespace libmsstyle.Import
         {
             foreach (var name in m_source.ClassesByName.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
             {
+                if (string.Equals(name, RedpillDwmClass, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!m_target.ClassesByName.ContainsKey(name))
                     m_report.SourceClassesMissingInTarget.Add(name);
             }
@@ -338,7 +392,8 @@ namespace libmsstyle.Import
                 m_base.ByKey.TryGetValue(key, out var b);
                 m_source.ByKey.TryGetValue(key, out var s);
                 var any = s ?? b;
-                if (string.Equals(any.ClassName, DwmClass, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(any.ClassName, DwmClass, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(any.ClassName, RedpillDwmClass, StringComparison.OrdinalIgnoreCase)) continue;
                 if (m_target.DuplicateClassNames.Contains(any.ClassName)) 
                 {
                     if (s != null && b != null && !Same(m_base, b, m_source, s))
@@ -757,7 +812,8 @@ namespace libmsstyle.Import
         /// Shared merge rule. Returns true when the target property was rewritten from the source (or deleted, for colors).
         /// </summary>
         internal bool ThreeWay(string cls, string part, int state, string prop,
-            SemanticEntry b, SemanticEntry s, SemanticEntry a, SemanticModel src, bool partNameKnown)
+            SemanticEntry b, SemanticEntry s, SemanticEntry a, SemanticModel src, bool partNameKnown,
+            string targetClass = null, string targetPart = null)
         {
             var r = m_report;
             if (s == null && b != null)
@@ -829,7 +885,7 @@ namespace libmsstyle.Import
                     Decide(s, "excluded", "matched an exclude rule", null, s, null, null);
                     return false;
                 }
-                if (TryAddRecord(s, src, out string why))
+                if (TryAddRecord(s, src, out string why, targetClass, targetPart))
                 {
                     Decide(s, "added", "source sets this where stock win7 has nothing; added the record to the template", null, s, null, null);
                     r.Count("added");
@@ -1010,10 +1066,15 @@ namespace libmsstyle.Import
         /// The value goes through ApplySourceValue, so images are copied, string and font ids are
         /// translated and records whose meaning changed between win7 and win10 are refused.
         /// </summary>
-        private bool TryAddRecord(SemanticEntry s, SemanticModel src, out string why)
+        /// <param name="targetClass">the class that receives the record, when it differs from the source's (DWM aliases).</param>
+        /// <param name="targetPart">the part that receives the record, when it differs from the source's (DWM aliases).</param>
+        private bool TryAddRecord(SemanticEntry s, SemanticModel src, out string why,
+            string targetClass = null, string targetPart = null)
         {
             why = null;
-            if (!m_target.ClassesByName.TryGetValue(s.ClassName, out var cls) || m_target.DuplicateClassNames.Contains(s.ClassName))
+            string className = targetClass ?? s.ClassName;
+            string partName = targetPart ?? s.PartName;
+            if (!m_target.ClassesByName.TryGetValue(className, out var cls) || m_target.DuplicateClassNames.Contains(className))
             {
                 why = "class doesn't exist in the template (or isn't unique)";
                 return false;
@@ -1025,10 +1086,10 @@ namespace libmsstyle.Import
                 return false;
             }
             int partId = s.PartId;
-            if (s.PartNameKnown)
+            if (s.PartNameKnown || targetPart != null)
             {
-                var byName = SemanticModel.PartNames(cls.ClassName, m_target.Platform).Where(kv => kv.Value == s.PartName).Select(kv => kv.Key).ToList();
-                if (byName.Count != 1) { why = $"part {s.PartName} isn't known for {cls.ClassName} in the template"; return false; }
+                var byName = SemanticModel.PartNames(cls.ClassName, m_target.Platform).Where(kv => kv.Value == partName).Select(kv => kv.Key).ToList();
+                if (byName.Count != 1) { why = $"part {partName} isn't known for {cls.ClassName} in the template"; return false; }
                 partId = byName[0];
             }
 
@@ -1051,7 +1112,7 @@ namespace libmsstyle.Import
 
             if (part == null)
             {
-                part = new StylePart { PartId = partId, PartName = s.PartName };
+                part = new StylePart { PartId = partId, PartName = partName };
                 cls.Parts.Add(partId, part);
             }
             if (state == null)
@@ -1060,7 +1121,7 @@ namespace libmsstyle.Import
                 part.States.Add(s.StateId, state);
             }
             state.Properties.Add(prop);
-            MarkTouched(prop, $"{s.ClassName}|{s.PartName}|S{s.StateId}|{s.PropertyName}");
+            MarkTouched(prop, $"{className}|{partName}|S{s.StateId}|{s.PropertyName}");
             AddedRecords.Add($"{cls.ClassId}/{partId}/{s.StateId}/{prop.Header.nameID}/{prop.Header.typeID}");
             return true;
         }
@@ -1329,6 +1390,7 @@ namespace libmsstyle.Import
         internal SemanticModel Base => m_base;
         internal SemanticModel Source => m_source;
         internal SemanticModel Target => m_target;
+        internal string DwmSourceClass => m_dwmSourceClass;
         internal ImportReport Report => m_report;
         internal Win7ImportOptions Options => m_opt;
         internal ResourceIdAllocator Allocator => m_alloc;

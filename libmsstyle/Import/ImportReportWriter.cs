@@ -21,7 +21,7 @@ namespace libmsstyle.Import
         public static string ToMarkdown(ImportReport r)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("# Windows 7/8.x style import report");
+            sb.AppendLine("# Windows 7 style import report");
             sb.AppendLine();
             sb.AppendLine($"Status: **{r.Status}** ({(r.DryRun ? "dry run" : "write")}). {r.StatusText}");
             sb.AppendLine();
@@ -56,6 +56,8 @@ namespace libmsstyle.Import
             sb.AppendLine("## DWMWindow");
             sb.AppendLine();
             sb.AppendLine($"- template atlas is the stock win7 atlas: {d.TemplateAtlasIsStockWin7}");
+            sb.AppendLine($"- source has W8:DWMWindow (redpill): {d.SourceHasRedpillDwm}");
+            sb.AppendLine($"- DWM images taken from: {d.SourceDwmClass ?? "DWMWindow"} ({d.SourceDwmChoice ?? "default"})");
             sb.AppendLine($"- source atlas differs from stock: {d.SourceAtlasChanged} ({d.SourceAtlasSize})");
             sb.AppendLine($"- atlas stream: template {d.TemplateAtlasId} -> output {d.NewAtlasId} ({d.NewAtlasSize}{(d.AtlasReencoded ? ", re-encoded with kept template sprites" : ", source bytes unchanged")})");
             sb.AppendLine($"- win7-only parts dropped: {(d.Win7OnlyParts.Count == 0 ? "none" : string.Join(", ", d.Win7OnlyParts))}");

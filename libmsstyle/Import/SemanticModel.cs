@@ -75,7 +75,7 @@ namespace libmsstyle.Import
                 if (DuplicateClassNames.Contains(cls.ClassName) && ClassesByName[cls.ClassName] != cls)
                     continue;
 
-                var partNames = PartNames(cls.ClassName, Platform);
+                var partNames = PartNamesForClass(cls, Platform);
                 foreach (var part in cls.Parts.Values.OrderBy(p => p.PartId))
                 {
                     bool known = partNames.TryGetValue(part.PartId, out string partName);
@@ -142,6 +142,61 @@ namespace libmsstyle.Import
                 if (!map.ContainsKey(p.Id)) map[p.Id] = p.Name;
             }
             return map;
+        }
+
+        /// <summary>
+        /// DWMWindow naming for one concrete class. Windows 8.x normally uses the 8.1 numbering
+        /// (PARTS_DWMWINDOW_WIN81), but Redpill builds keep the windows 7 class in DWMWindow and
+        /// early windows 8 builds prior to 8128 also number W8:DWMWindow the windows 7 way. The class
+        /// layout itself tells them apart, since the platform byte alone can't.
+        /// </summary>
+        private static Dictionary<int, string> PartNamesForClass(StyleClass cls, Platform platform)
+        {
+            if ((platform == Platform.Win8 || platform == Platform.Win81)
+                && cls.ClassName.IndexOf("DWMWindow", StringComparison.OrdinalIgnoreCase) >= 0
+                && LooksWin7NumberedDwm(cls))
+            {
+                var names = PartNames(cls.ClassName, Platform.Win7);
+                // early windows 8 appended the new reflection map instead of renumbering;
+                // build 8056 has it at 72, and thumbnail border would follow at 73.
+                if (cls.Parts.ContainsKey(72)) names[72] = "SQUEEGEEREFLECTIONMAP";
+                if (cls.Parts.ContainsKey(73)) names[73] = "THUMBNAILBORDER";
+                return names;
+            }
+            return PartNames(cls.ClassName, platform);
+        }
+
+        /// <summary>
+        /// Win7's part 16 is BUTTONGLOW (a wide glow), 8.1's is BUTTONHELPGLYPH96 (a tall
+        /// four-frame glyph). Parts 32/33 make the same split: 32 is a tall restore glyph on
+        /// win7 but a tiny LEFTFRAME strip on 8.1, while 33 is a tiny LEFTFRAME on win7 but a
+        /// tall LEFTSHADOW on 8.1. Fall back to the platform table if the class has none.
+        /// </summary>
+        private static bool LooksWin7NumberedDwm(StyleClass cls)
+        {
+            if (TryAtlasRect(cls, 16, out var r16))
+                return r16.Height <= r16.Width * 2;
+            if (TryAtlasRect(cls, 32, out var r32) && r32.Width > 0)
+                return r32.Height > r32.Width * 2;
+            if (TryAtlasRect(cls, 33, out var r33) && r33.Width > 0)
+                return r33.Height <= r33.Width * 2;
+            return false;
+        }
+
+        private static bool TryAtlasRect(StyleClass cls, int partId, out Rectangle rect)
+        {
+            rect = Rectangle.Empty;
+            if (!cls.Parts.TryGetValue(partId, out var part)) return false;
+            foreach (var state in part.States.Values.OrderBy(s => s.StateId))
+            {
+                var prop = state.Properties.FirstOrDefault(p => p.Header.nameID == (int)IDENTIFIER.ATLASRECT);
+                if (prop?.GetValue() is Margins m)
+                {
+                    rect = Rectangle.FromLTRB(m.Left, m.Top, m.Right, m.Bottom);
+                    return rect.Width > 0 && rect.Height > 0;
+                }
+            }
+            return false;
         }
 
         public static string PropertyName(int nameId)

@@ -8,10 +8,10 @@ In the editor the template is the open style: it's saved (standalone) to `%TEMP%
 
 ## Pipeline
 
-1. `VisualStyle.Load` all three; any `LoadDiagnostics` entry blocks the run. The base must be Vista/7 (normally the built-in stock Windows 7 aero), the source may be Vista/7/8/8.1, and the template must be 10/11. Windows 8.x sources are merged against stock Windows 7: the records and DWM parts they no longer ship are simply absent on the source side of the three-way comparison.
+1. `VisualStyle.Load` all three; any `LoadDiagnostics` entry blocks the run. The base must be Vista/7 (normally the built-in stock Windows 7 aero), the source may be Vista/7/8/8.1, and the template must be 10/11. Windows 8.x sources are merged against stock Windows 7: the records and DWM parts they no longer ship are simply absent on the source side of the three-way comparison. A Redpill source may also define `W8:DWMWindow` next to `DWMWindow`; see [DWMWindow](#dwmwindow).
 2. `SemanticModel` flattens each style to `class|part name|S<state>|property#type[@n]`. Images compare by decoded pixels, string ids (FONT and non-image FILENAME) by their string-table text when both sides have a table, by id otherwise. Only IMAGEFILE..IMAGEFILE7/GLYPHIMAGEFILE are IMAGE references; resource ids use the low word like uxtheme. Numeric class ids never take part in matching.
 3. `BuildThreeWayDiff` records every key (written to `<prefix>.threeway.json`).
-4. `DwmImport` handles DWMWindow (below), then `MergeGenericClasses` everything else.
+4. `DwmImport` handles DWMWindow (below), then `MergeGenericClasses` everything else. The redpill `W8:DWMWindow` class is consumed only by `DwmImport`; it is skipped by the generic merge, the three-way diff and the missing-class report, so it never becomes a template class.
 5. New bytes go through `ResourceIdAllocator` (max id + 1, shared when bytes are identical; ids with several language variants are never shared). Existing resources are never rewritten.
 6. `VisualStyle.Save` into a validation folder of its own, with `StyleCompanions.CopyAlongside` putting the template's `Shell` folder and `<lang>\<name>.msstyles.mui` next to it (mui-based templates only resolve their string tables that way), then `StyleValidator` against the template. On success the file is moved to the output and the companions are copied there too; the validation folder is always deleted. The editor passes the opened file as `CompanionSourcePath`, because its template is a temp snapshot.
 
@@ -54,6 +54,10 @@ Checking colors by hand: applying only the `.msstyles` (without a `.theme`) can 
 
 ## DWMWindow
 
+A Redpill build keeps the old images in `DWMWindow` and adds the redpilled ones in `W8:DWMWindow`; `Win7StyleImporter.HasRedpillDwm` detects that second class. In the editor, `DwmSourceDialog` then asks whether to import the unredpilled images from `DWMWindow` or the redpilled images from `W8:DWMWindow`, and the answer becomes `Win7ImportOptions.DwmSource` (`Unredpilled` or `Redpilled`). Nothing is asked when `W8:DWMWindow` is absent. The CLI stays non-interactive: `--dwm-source auto` (the default) and `unredpilled` read `DWMWindow`, while `redpilled` reads `W8:DWMWindow` when it exists and otherwise warns and falls back to `DWMWindow`. `Auto` deliberately keeps the historical `DWMWindow` behavior.
+
+Either choice feeds the same DWM pass: the selected source class is read through a `DWMWindow`-named view, so its images and properties land in the template's `DWMWindow`, never in a new `W8:DWMWindow` class. The report records `SourceHasRedpillDwm`, `SourceDwmClass` and `SourceDwmChoice`.
+
 The template atlas has to be the stock Windows 7 atlas (pixel-compared, `TemplateAtlasIsStockWin7`). Then:
 
 - a template rect equal to the stock rect of the same-named Windows 7 part maps by name;
@@ -70,7 +74,13 @@ Windows 7's frame highlights (LEFTHIGHLIGHTCORNER 34, SIDEHIGHLIGHT 43) have no 
 
 ### Part numbering across versions
 
-The DWMWindow part table lives in uDWM, not uxtheme. Windows 7 has 71 parts. Windows 8.x removed nine (BUTTONGLOW, LEFTHIGHLIGHTCORNER, the four FLIP3D parts, REFLECTIONMAP, SIDEHIGHLIGHT, SMALLBUTTONCLOSEGLOW) and renumbered everything after each gap, then added SQUEEGEEREFLECTIONMAP and THUMBNAILBORDER; stock 8.x aero also stops writing BUTTONCLOSEGLOW, which is why that part shows up as dropped for an 8.x source. Windows 8.0 and 8.1 share this table, so `VisualStyleParts.Find` maps both platforms to `PARTS_DWMWINDOW_WIN81`. Windows 10 1511 kept 1-64 and appended dark glyphs (65-88) and dark caption backgrounds (89-92). A later Windows 10 removed BUTTONCLOSEGLOW (11) and shifted every id from 12 down by one, so 19041 has dark glyphs at 64-87 and dark caption backgrounds at 88-91. That's why the importer matches by name and sprite, never by number. uDWM on every version aborts the whole theme load on the first part it asks for and doesn't find; from 8.1 on it also requires the DWMTouch, DWMPen, Animations and TimingFunction classes, so a Windows 7 style can't work on 8+ without a template.
+The DWMWindow part table lives in uDWM, not uxtheme. Windows 7 has 71 parts. Final Windows 8.x removed nine (BUTTONGLOW, LEFTHIGHLIGHTCORNER, the four FLIP3D parts, REFLECTIONMAP, SIDEHIGHLIGHT, SMALLBUTTONCLOSEGLOW) and renumbered everything after each gap, then added SQUEEGEEREFLECTIONMAP and THUMBNAILBORDER; stock 8.x aero also stops writing BUTTONCLOSEGLOW, which is why that part shows up as dropped for an 8.x source. Windows 8.0 and 8.1 share that table, so `VisualStyleParts.Find` maps both platforms to `PARTS_DWMWINDOW_WIN81`.
+
+That table didn't exist for the whole 8.x line: early Windows 8 builds still used the Windows 7 ids. Build 8056 is one of them — both of its DWM classes number their parts the Windows 7 way (16 is BUTTONGLOW, 33 LEFTFRAME, 35 LEFTSHADOW, 42 RIGHTSHADOW, 56 TOPFRAME, 57 TOPSHADOW) and `W8:DWMWindow` simply appends SQUEEGEEREFLECTIONMAP at 72 (THUMBNAILBORDER would follow at 73). Reading those parts with the 8.1 table shifts everything after the removed glow parts, so frames and shadows would point at glyph sprites. The platform byte can't distinguish the layouts, so the importer detects each concrete DWM class from its own part grid: part 16 is a wide BUTTONGLOW on Windows 7 numbering versus a tall BUTTONHELPGLYPH96 on 8.1; parts 32/33 make the same split (a tall glyph versus a thin frame strip). Anything without that evidence keeps the platform table.
+
+Redpill builds ship both classes: their `DWMWindow` keeps the unredpilled images, their `W8:DWMWindow` the redpilled ones. On build 8056 both also keep the Windows 7 numbering; on final 8.1 the classes use the 8.1 numbering. Either way the importer uses whichever class the caller selected and applies it to the template's `DWMWindow`, matching by name and sprite.
+
+Windows 10 1511 kept 1-64 and appended dark glyphs (65-88) and dark caption backgrounds (89-92). A later Windows 10 removed BUTTONCLOSEGLOW (11) and shifted every id from 12 down by one, so 19041 has dark glyphs at 64-87 and dark caption backgrounds at 88-91. That's why the importer matches by name and sprite, never by number. uDWM on every version aborts the whole theme load on the first part it asks for and doesn't find; from 8.1 on it also requires the DWMTouch, DWMPen, Animations and TimingFunction classes, so a Windows 7 style can't work on 8+ without a template.
 
 ## Binary evidence
 

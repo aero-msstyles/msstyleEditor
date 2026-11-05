@@ -52,19 +52,50 @@ namespace libmsstyle.Import
             m_rep = importer.Report.Dwm;
         }
 
-        private static Dictionary<string, PartData> Group(SemanticModel m)
+        private static Dictionary<string, PartData> Group(SemanticModel m, string className, string aliasClassName = null)
         {
             var d = new Dictionary<string, PartData>(StringComparer.OrdinalIgnoreCase);
-            foreach (var e in m.Entries.Where(e => string.Equals(e.ClassName, Win7StyleImporter.DwmClass, StringComparison.OrdinalIgnoreCase)))
+            foreach (var e in m.Entries.Where(e => string.Equals(e.ClassName, className, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!d.TryGetValue(e.PartName, out var p))
+                var entry = aliasClassName == null || string.Equals(e.ClassName, aliasClassName, StringComparison.OrdinalIgnoreCase)
+                    ? e
+                    : Aliased(e, aliasClassName);
+                if (!d.TryGetValue(entry.PartName, out var p))
                 {
-                    p = new PartData { Name = e.PartName, Id = e.PartId };
-                    d[e.PartName] = p;
+                    p = new PartData { Name = entry.PartName, Id = entry.PartId };
+                    d[entry.PartName] = p;
                 }
-                p.Entries.Add(e);
+                p.Entries.Add(entry);
             }
             return d;
+        }
+
+        /// <summary>
+        /// The redpill source class is read as if it were DWMWindow, so source-added properties end
+        /// up in the template's DWMWindow instead of a class name the template doesn't have.
+        /// </summary>
+        private static SemanticEntry Aliased(SemanticEntry e, string className)
+        {
+            return new SemanticEntry
+            {
+                ClassName = className,
+                ClassId = e.ClassId,
+                PartName = e.PartName,
+                PartId = e.PartId,
+                PartNameKnown = e.PartNameKnown,
+                StateName = e.StateName,
+                StateId = e.StateId,
+                NameId = e.NameId,
+                PropertyName = e.PropertyName,
+                TypeId = e.TypeId,
+                Occurrence = e.Occurrence,
+                Value = e.Value,
+                RawValue = e.RawValue,
+                ResourceId = e.ResourceId,
+                ResourceType = e.ResourceType,
+                IsStringRef = e.IsStringRef,
+                Property = e.Property,
+            };
         }
 
         internal static Rectangle RectOf(SemanticEntry e)
@@ -83,9 +114,9 @@ namespace libmsstyle.Import
         public void Run()
         {
             var report = m_imp.Report;
-            var b = Group(m_imp.Base);
-            var s = Group(m_imp.Source);
-            var t = Group(m_imp.Target);
+            var b = Group(m_imp.Base, Win7StyleImporter.DwmClass);
+            var s = Group(m_imp.Source, m_imp.DwmSourceClass, Win7StyleImporter.DwmClass);
+            var t = Group(m_imp.Target, Win7StyleImporter.DwmClass);
 
             if (t.Count == 0)
             {
@@ -420,7 +451,8 @@ namespace libmsstyle.Import
                 if (se.TypeId == (int)IDENTIFIER.DISKSTREAM) continue;
                 if (tp.Find(se.StateId, se.PropertyName, se.TypeId, se.Occurrence) != null) continue;
                 var be = bp.Find(se.StateId, se.PropertyName, se.TypeId, se.Occurrence);
-                m_imp.ThreeWay(Win7StyleImporter.DwmClass, tp.Name, se.StateId, se.PropertyName, be, se, null, m_imp.Source, true);
+                m_imp.ThreeWay(Win7StyleImporter.DwmClass, tp.Name, se.StateId, se.PropertyName, be, se, null, m_imp.Source, true,
+                    Win7StyleImporter.DwmClass, tp.Name);
             }
         }
 

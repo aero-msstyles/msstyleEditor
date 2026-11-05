@@ -5,6 +5,17 @@ using System.Text.RegularExpressions;
 
 namespace libmsstyle.Import
 {
+    /// <summary>Which DWM class in the source supplies the frames, caption buttons and glyphs.</summary>
+    public enum DwmSourceChoice
+    {
+        /// <summary>headless default: use the source's DWMWindow, like the importer always did.</summary>
+        Auto,
+        /// <summary>the source's DWMWindow (the unredpilled images).</summary>
+        Unredpilled,
+        /// <summary>the source's W8:DWMWindow (the redpilled images), when the source has that class.</summary>
+        Redpilled,
+    }
+
     public class Win7ImportOptions
     {
         /// <summary>the customized windows 7 style.</summary>
@@ -38,6 +49,13 @@ namespace libmsstyle.Import
         /// Empty = the template. The editor sets the opened file here, since its template is a temp snapshot.
         /// </summary>
         public string CompanionSourcePath { get; set; }
+
+        /// <summary>
+        /// Where DWM frames come from. Redpilled uses W8:DWMWindow when the source has it; if it
+        /// doesn't, the importer falls back to DWMWindow and reports a warning. Auto and
+        /// Unredpilled both use DWMWindow, so headless runs without the flag keep the old behavior.
+        /// </summary>
+        public DwmSourceChoice DwmSource { get; set; } = DwmSourceChoice.Auto;
     }
 
     public static class KeyPattern
@@ -105,6 +123,12 @@ namespace libmsstyle.Import
     {
         public bool TemplateAtlasIsStockWin7 { get; set; }
         public bool SourceAtlasChanged { get; set; }
+        /// <summary>the source defines a W8:DWMWindow class (a Redpill build with both DWM classes).</summary>
+        public bool SourceHasRedpillDwm { get; set; }
+        /// <summary>the source class the DWM pass actually read: "DWMWindow" or "W8:DWMWindow".</summary>
+        public string SourceDwmClass { get; set; }
+        /// <summary>human readable form of the choice, for the report.</summary>
+        public string SourceDwmChoice { get; set; }
         public int TemplateAtlasId { get; set; }
         public int NewAtlasId { get; set; }
         public string SourceAtlasSize { get; set; }

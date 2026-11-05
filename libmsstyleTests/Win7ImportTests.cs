@@ -14,6 +14,8 @@ namespace libmsstyleTests
     {
         const string W7Aero = @"..\..\..\styles\w7_aero.msstyles";
         const string Win81Aero = @"..\..\..\styles\w81_aero.msstyles";
+        const string Win8_8056 = @"..\..\..\styles\w80_8056_aero\aero.msstyles";
+        const string Win8_8161 = @"..\..\..\styles\w80_8161_aero\aero.msstyles";
         const string Aero11 = @"..\..\..\styles\aero11_7_clear.msstyles";
 
         // Shine 2.0 isn't redistributable, so it isn't in the repo. Point MSSTYLE_SHINE at it to run those tests.
@@ -136,6 +138,174 @@ namespace libmsstyleTests
                 Assert.IsFalse(om.Entries.Any(e => e.ClassName == "DWMWindow" && (e.PartId == 95 || e.PartId == 96)),
                     "removed 8.x highlights must not be invented");
             }
+        }
+
+        [TestMethod]
+        public void RedpillSourceCanUseEitherDwmClass()
+        {
+            Assert.IsTrue(Win7StyleImporter.HasRedpillDwm(Win8_8056));
+            Assert.IsFalse(Win7StyleImporter.HasRedpillDwm(Win8_8161));
+
+            // Auto keeps the historical behavior: the old DWMWindow images.
+            string plainOutput = Path.Combine(m_dir, "redpill-unredpilled.msstyles");
+            var plain = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8056,
+                TemplatePath = Aero11,
+                OutputPath = plainOutput,
+                DryRun = false
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, plain.Status, string.Join("\n", plain.Errors));
+            Assert.IsTrue(plain.Dwm.SourceHasRedpillDwm);
+            Assert.AreEqual("DWMWindow", plain.Dwm.SourceDwmClass);
+            Assert.AreEqual("1357x780", plain.Dwm.SourceAtlasSize);
+
+            // choosing "unredpilled" explicitly must do the same as the headless default.
+            var unred = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8056,
+                TemplatePath = Aero11,
+                DryRun = true,
+                DwmSource = DwmSourceChoice.Unredpilled
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, unred.Status, string.Join("\n", unred.Errors));
+            Assert.AreEqual("DWMWindow", unred.Dwm.SourceDwmClass);
+            Assert.AreEqual("1357x780", unred.Dwm.SourceAtlasSize);
+
+            string redOutput = Path.Combine(m_dir, "redpill-redpilled.msstyles");
+            var red = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8056,
+                TemplatePath = Aero11,
+                OutputPath = redOutput,
+                DryRun = false,
+                DwmSource = DwmSourceChoice.Redpilled
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, red.Status, string.Join("\n", red.Errors));
+            Assert.IsTrue(red.Dwm.SourceHasRedpillDwm);
+            Assert.AreEqual("W8:DWMWindow", red.Dwm.SourceDwmClass);
+            Assert.AreEqual("499x796", red.Dwm.SourceAtlasSize);
+            Assert.IsTrue(red.Dwm.SourceAtlasChanged);
+
+            // W8:DWMWindow is consumed as the DWM source, never merged or reported as a template class.
+            Assert.IsFalse(red.Decisions.Any(d => d.Class == "W8:DWMWindow"));
+            Assert.IsFalse(red.ThreeWayEntries.Any(e => e.Class == "W8:DWMWindow"));
+            Assert.IsFalse(red.SourceClassesMissingInTarget.Contains("W8:DWMWindow"));
+
+            var close = red.Dwm.Parts.Single(p => p.TargetPart == "BUTTONCLOSEGLYPH96");
+            Assert.AreEqual("BUTTONCLOSEGLYPH96", close.SourcePart);
+            Assert.AreEqual("name", close.Method);
+
+            using (var src = new VisualStyle())
+            using (var o = new VisualStyle())
+            {
+                src.Load(Win8_8056);
+                o.Load(redOutput);
+                var sm = new SemanticModel(src);
+                var om = new SemanticModel(o);
+                Assert.IsFalse(om.ClassesByName.ContainsKey("W8:DWMWindow"));
+
+                var sRectEntry = sm.Entries.Single(e => e.ClassName == "W8:DWMWindow"
+                    && e.PartName == "BUTTONCLOSEGLYPH96" && e.PropertyName == "ATLASRECT");
+                var oRectEntry = om.Entries.Single(e => e.ClassName == "DWMWindow"
+                    && e.PartName == "BUTTONCLOSEGLYPH96" && e.PropertyName == "ATLASRECT");
+                var sRect = DwmImport.RectOf(sRectEntry);
+                var oRect = DwmImport.RectOf(oRectEntry);
+                Assert.AreEqual(sRect, oRect, "the template's glyph must point at the redpilled sprite");
+
+                var sAtlasEntry = sm.Entries.Single(e => e.ClassName == "W8:DWMWindow"
+                    && e.PartId == 0 && e.TypeId == (int)IDENTIFIER.DISKSTREAM);
+                var oAtlasEntry = om.Entries.Single(e => e.ClassName == "DWMWindow"
+                    && e.PartId == 0 && e.TypeId == (int)IDENTIFIER.DISKSTREAM);
+                var sAtlas = ImageIdentity.Decode(sm.GetResourceBytes("STREAM", sAtlasEntry.ResourceId));
+                var oAtlas = ImageIdentity.Decode(om.GetResourceBytes("STREAM", oAtlasEntry.ResourceId));
+                Assert.IsTrue(Win7StyleImporter.NearlyEqual(sAtlas.Crop(sRect), oAtlas.Crop(oRect), 0));
+            }
+        }
+
+        [TestMethod]
+        public void EarlyWin8_8056KeepsTheWin7PartIdsForFramesAndShadows()
+        {
+            // Build 8056 predates the 8.1 renumbering: both DWMWindow and W8:DWMWindow still use
+            // the win7 ids (16 is BUTTONGLOW, 33 is LEFTFRAME, 42 RIGHTSHADOW, 56 TOPFRAME...),
+            // even though the file's platform is win8.1. Reading them with the 8.1 table shifted
+            // everything after the removed glows, so frames and shadows pointed at glyphs.
+            using (var src = new VisualStyle())
+            {
+                src.Load(Win8_8056);
+                var m = new SemanticModel(src);
+                SemanticEntry Rect(string cls, string part) => m.Entries.Single(e =>
+                    e.ClassName == cls && e.PartName == part && e.PropertyName == "ATLASRECT");
+
+                Assert.AreEqual("BUTTONGLOW", m.Entries.Single(e =>
+                    e.ClassName == "DWMWindow" && e.PartId == 16 && e.PropertyName == "ATLASRECT").PartName);
+                Assert.AreEqual("SQUEEGEEREFLECTIONMAP", m.Entries.Single(e =>
+                    e.ClassName == "W8:DWMWindow" && e.PartId == 72 && e.PropertyName == "ATLASRECT").PartName);
+
+                Assert.AreEqual(33, Rect("W8:DWMWindow", "LEFTFRAME").PartId);
+                Assert.AreEqual(new Rectangle(0, 96, 8, 8), DwmImport.RectOf(Rect("W8:DWMWindow", "LEFTFRAME")));
+                Assert.AreEqual(35, Rect("W8:DWMWindow", "LEFTSHADOW").PartId);
+                Assert.AreEqual(42, Rect("W8:DWMWindow", "RIGHTSHADOW").PartId);
+                Assert.AreEqual(56, Rect("W8:DWMWindow", "TOPFRAME").PartId);
+                Assert.AreEqual(57, Rect("W8:DWMWindow", "TOPSHADOW").PartId);
+            }
+
+            var unred = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8056,
+                TemplatePath = Aero11,
+                DryRun = true,
+                DwmSource = DwmSourceChoice.Unredpilled
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, unred.Status, string.Join("\n", unred.Errors));
+            var uLeft = unred.Dwm.Parts.Single(p => p.TargetPart == "LEFTFRAME");
+            Assert.AreEqual("name", uLeft.Method, uLeft.Note);
+            Assert.AreEqual(new Rectangle(0, 376, 11, 6).ToString(), uLeft.NewRect);
+
+            var red = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8056,
+                TemplatePath = Aero11,
+                DryRun = true,
+                DwmSource = DwmSourceChoice.Redpilled
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, red.Status, string.Join("\n", red.Errors));
+            var frames = new[]
+            {
+                ("LEFTFRAME", new Rectangle(0, 96, 8, 8)),
+                ("RIGHTFRAME", new Rectangle(0, 88, 8, 8)),
+                ("LEFTSHADOW", new Rectangle(16, 0, 16, 74)),
+                ("RIGHTSHADOW", new Rectangle(37, 160, 22, 74)),
+                ("TOPFRAME", new Rectangle(0, 514, 15, 14)),
+                ("TOPSHADOW", new Rectangle(111, 392, 59, 32)),
+                ("BOTTOMFRAME", new Rectangle(0, 544, 15, 16)),
+                ("BOTTOMSHADOW", new Rectangle(111, 424, 62, 44)),
+            };
+            foreach (var (part, rect) in frames)
+            {
+                var p = red.Dwm.Parts.Single(x => x.TargetPart == part);
+                Assert.AreEqual("name", p.Method, part + ": " + p.Note);
+                Assert.AreEqual(part, p.SourcePart);
+                Assert.AreEqual(rect.ToString(), p.NewRect, part);
+            }
+            CollectionAssert.DoesNotContain(red.Dwm.FallbackParts, "LEFTFRAME");
+            CollectionAssert.DoesNotContain(red.Dwm.FallbackParts, "TOPSHADOW");
+        }
+
+        [TestMethod]
+        public void RedpillChoiceWithoutTheClassFallsBackToDwmWindow()
+        {
+            var r = Win7StyleImporter.Run(new Win7ImportOptions
+            {
+                SourcePath = Win8_8161,
+                TemplatePath = Aero11,
+                DryRun = true,
+                DwmSource = DwmSourceChoice.Redpilled
+            });
+            Assert.AreEqual(ImportStatus.ReadyForVmTest, r.Status, string.Join("\n", r.Errors));
+            Assert.IsFalse(r.Dwm.SourceHasRedpillDwm);
+            Assert.AreEqual("DWMWindow", r.Dwm.SourceDwmClass);
+            Assert.IsTrue(r.Warnings.Any(w => w.Contains("W8:DWMWindow") && w.Contains("requested")), string.Join("\n", r.Warnings));
         }
 
         [TestMethod]

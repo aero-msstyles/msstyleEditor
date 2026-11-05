@@ -13,7 +13,7 @@ namespace msstyleEditor
         public Win7ImportDialog(ImportReport report, string reportPath)
         {
             bool ok = report.Status == ImportStatus.ReadyForVmTest;
-            Text = ok ? "Windows 7/8.x style imported" : "Windows 7 import blocked";
+            Text = ok ? "Windows 7/8.x style imported" : "Windows 7/8.x import blocked";
             Size = new Size(900, 640);
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false;
@@ -60,6 +60,79 @@ namespace msstyleEditor
             Shown += (s, e) => close.Focus();
             Controls.Add(buttons);
             Controls.Add(summary);
+        }
+    }
+
+    /// <summary>
+    /// Asks which DWM images to import when a Redpill source defines both DWMWindow and W8:DWMWindow.
+    /// Shown only when the source has W8:DWMWindow; Cancel aborts the import without changing anything.
+    /// </summary>
+    public class DwmSourceDialog : Form
+    {
+        public bool Redpilled { get; private set; }
+
+        public DwmSourceDialog()
+        {
+            Text = "Choose DWM window images";
+            Size = new Size(560, 270);
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MinimizeBox = false;
+            MaximizeBox = false;
+            ShowInTaskbar = false;
+
+            var text = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = false,
+                Height = 86,
+                Padding = new Padding(12),
+                Text = "This Windows 8.x source is a Redpill build: it has both a DWMWindow class with the " +
+                       "unredpilled images and a W8:DWMWindow class with the redpilled images.\r\n\r\n" +
+                       "Which set should be applied to the template's DWMWindow?"
+            };
+
+            var choices = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Padding = new Padding(24, 0, 12, 0),
+                AutoSize = true
+            };
+            var unredpilled = new RadioButton
+            {
+                Text = "Unredpilled images (source DWMWindow)",
+                AutoSize = true,
+                Checked = true
+            };
+            var redpilled = new RadioButton
+            {
+                Text = "Redpilled images (source W8:DWMWindow)",
+                AutoSize = true
+            };
+            choices.Controls.Add(unredpilled);
+            choices.Controls.Add(redpilled);
+
+            var buttons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.RightToLeft,
+                AutoSize = true,
+                Padding = new Padding(12)
+            };
+            var ok = new Button { Text = "OK", AutoSize = true, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
+            ok.Click += (s, e) => Redpilled = redpilled.Checked;
+            buttons.Controls.Add(ok);
+            buttons.Controls.Add(cancel);
+            AcceptButton = ok;
+            CancelButton = cancel;
+
+            Controls.Add(choices);
+            Controls.Add(buttons);
+            Controls.Add(text);
+            Shown += (s, e) => unredpilled.Focus();
         }
     }
 }

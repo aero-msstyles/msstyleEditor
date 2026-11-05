@@ -343,3 +343,6 @@ MigrationBackup/
 *.msix
 *.msm
 *.msp
+
+# WinMerge backups
+*.bak 

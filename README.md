@@ -54,19 +54,21 @@ Open a Windows 10 style that already works on your machine (e.g. an Aero 7 port)
 
 Windows 8 and 8.1 styles are accepted as source too, but stock Windows 7 `aero.msstyles` is always the reference: only what the custom style changed relative to stock is carried over, and only where the open style still has the stock value. Parts and properties Windows 8.x no longer ships are absent on the source side and therefore contribute nothing. Everything else in the open style (class map, inheritance, animations, dark mode parts, every untouched resource) stays byte for byte. Images are compared by pixels, so a template that re-encoded the stock images still counts as stock.
 
-DWMWindow (frames, caption buttons, glyphs) is matched by part name, not by part number, because the numbering changed after Windows 7. This only works if the template uses the stock Windows 7 DWM atlas; otherwise the template frames are kept and the report says so. Windows 10 parts without a Windows 7 counterpart (dark glyphs, extra caption backgrounds) follow the stock sprite they pointed at. Sprites that can't be traced keep the template's pixels.
+A Redpill build carries two DWM classes: `DWMWindow` with the unredpilled images and `W8:DWMWindow` with the redpilled ones. When the source has `W8:DWMWindow`, the editor asks which set to import and applies it to the template's `DWMWindow`; ordinary 7/8.x sources never prompt. The class itself is never added to the template.
+
+DWMWindow (frames, caption buttons, glyphs) is matched by part name, not by part number, because the numbering changed after Windows 7. Early Windows 8 builds still used the Windows 7 ids in both DWM classes; the importer detects that from each class's own part layout instead of trusting the platform version. This only works if the template uses the stock Windows 7 DWM atlas; otherwise the template frames are kept and the report says so. Windows 10 parts without a Windows 7 counterpart (dark glyphs, extra caption backgrounds) follow the stock sprite they pointed at. Sprites that can't be traced keep the template's pixels.
 
 If offline validation fails, nothing changes and the report says why. Every run writes a `.md` and `.json` report plus a `.threeway.json` with the full stock / custom / template comparison ("Open report folder" in the result window). The template's `Shell` folder and `<lang>\*.msstyles.mui` files are copied next to the result (renamed to match), since Windows can't load the shellstyle without them.
 
 The same thing runs headless:
 
 ```
-msstyleImport import --source custom.msstyles --template win10.msstyles --report out\report [--write --out out\candidate.msstyles]
+msstyleImport import --source custom.msstyles --template win10.msstyles --report out\report [--write --out out\candidate.msstyles] [--dwm-source auto|unredpilled|redpilled]
 ```
 
 `--prefer-source Class|Part|Property` takes the custom value where the template deliberately changed it, `--exclude` skips matches (`*` wildcards).
 
-The CLI does a dry run (reports only) unless `--write` is given; `--base` swaps in a different stock reference.
+The CLI does a dry run (reports only) unless `--write` is given; `--base` swaps in a different stock reference. `--dwm-source` picks the DWM images for a Redpill source: `auto` (the default) and `unredpilled` use `DWMWindow`, `redpilled` uses `W8:DWMWindow` when the source has it and otherwise falls back to `DWMWindow` with a warning. The CLI never prompts.
 
 Limitations:
 

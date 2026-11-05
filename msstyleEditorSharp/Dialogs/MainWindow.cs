@@ -1156,6 +1156,26 @@ namespace msstyleEditor
                 source = ofd.FileName;
             }
 
+            // Redpill builds have two DWM classes; ask which images to use. Ordinary sources never prompt.
+            var dwmSource = libmsstyle.Import.DwmSourceChoice.Auto;
+            try
+            {
+                if (libmsstyle.Import.Win7StyleImporter.HasRedpillDwm(source))
+                {
+                    using (var dlg = new DwmSourceDialog())
+                    {
+                        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                        dwmSource = dlg.Redpilled
+                            ? libmsstyle.Import.DwmSourceChoice.Redpilled
+                            : libmsstyle.Import.DwmSourceChoice.Unredpilled;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // let the importer report the load failure; without a readable source there is no prompt.
+            }
+
             // the open style may have unsaved edits, so the template is a snapshot of it, not its file.
             string work = Path.Combine(Path.GetTempPath(), "msstyleEditor-import", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
             string name = Path.GetFileNameWithoutExtension(m_style.Path);
@@ -1170,6 +1190,7 @@ namespace msstyleEditor
                 // the snapshot sits alone in temp; Shell and the .mui come from the file that's open.
                 CompanionSourcePath = m_style.Path,
                 DryRun = false,
+                DwmSource = dwmSource,
             };
 
             libmsstyle.Import.ImportReport report;

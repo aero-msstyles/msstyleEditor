@@ -39,8 +39,9 @@ namespace msstyleImport
                        --report <path prefix> [--base <stock win7 aero.msstyles, default: built in>]
                        [--write --out <candidate.msstyles>]
                        [--prefer-source Class|Part|Prop]... [--exclude Class|Part|Prop]...
-                       [--image-tolerance N]
+                       [--dwm-source auto|unredpilled|redpilled] [--image-tolerance N]
       dry run unless --write is given. reports: <prefix>.json, <prefix>.md, <prefix>.threeway.json
+      --dwm-source redpilled uses W8:DWMWindow when the source has it (Redpill builds); default is auto = DWMWindow.
   msstyleImport noop --template <style> --out <copy.msstyles>
       saves the template through libmsstyle without changes and validates the copy against it.
   msstyleImport inventory <style> <out.tsv>
@@ -72,6 +73,19 @@ nothing here applies or installs a theme.");
             return null;
         }
 
+        static DwmSourceChoice ParseDwmSource(string value)
+        {
+            switch (value.ToLowerInvariant())
+            {
+                case "auto": return DwmSourceChoice.Auto;
+                case "unredpilled":
+                case "unredpill": return DwmSourceChoice.Unredpilled;
+                case "redpilled":
+                case "redpill": return DwmSourceChoice.Redpilled;
+                default: throw new ArgumentException($"--dwm-source must be auto, unredpilled or redpilled, not \"{value}\"");
+            }
+        }
+
         static int Import(string[] args)
         {
             var a = ParseArgs(args);
@@ -83,6 +97,7 @@ nothing here applies or installs a theme.");
                 DryRun = !a.ContainsKey("write"),
                 PreferSource = a.TryGetValue("prefer-source", out var ps) ? ps : new List<string>(),
                 Exclude = a.TryGetValue("exclude", out var ex) ? ex : new List<string>(),
+                DwmSource = a.ContainsKey("dwm-source") ? ParseDwmSource(One(a, "dwm-source")) : DwmSourceChoice.Auto,
             };
             if (!opt.DryRun) opt.OutputPath = One(a, "out");
             if (a.ContainsKey("image-tolerance")) opt.ImageTolerance = int.Parse(One(a, "image-tolerance"));
