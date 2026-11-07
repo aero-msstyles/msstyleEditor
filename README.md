@@ -50,7 +50,7 @@ Saving the style is done via the menubar. It is recommended to save often, and t
 
 ## Importing a Windows 7 or 8.x style (experimental)
 
-Open a Windows 10 style that already works on your machine (e.g. an Aero 7 port), click Extras > Import Win7 Style and pick a custom Windows 7, 8 or 8.1 `.msstyles`. The open style gets the custom style's look, and the result is opened in the editor unsaved, so you can test it, keep editing and save it like any other style.
+Open a Windows 10 style that already works on your machine (e.g. an Aero 7 port), click Extras > Import 7/8.x Style and pick a custom Windows 7, 8 or 8.1 `.msstyles`. The open style gets the custom style's look, and the result is opened in the editor unsaved, so you can test it, keep editing and save it like any other style.
 
 Windows 8 and 8.1 styles are accepted as source too, but stock Windows 7 `aero.msstyles` is always the reference: only what the custom style changed relative to stock is carried over, and only where the open style still has the stock value. Parts and properties Windows 8.x no longer ships are absent on the source side and therefore contribute nothing. Everything else in the open style (class map, inheritance, animations, dark mode parts, every untouched resource) stays byte for byte. Images are compared by pixels, so a template that re-encoded the stock images still counts as stock.
 
