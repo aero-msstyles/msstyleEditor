@@ -32,15 +32,15 @@ namespace libmsstyle
             {
                 int header = 20; //header
 
-                if (Type == TransformType.Roatate3D || Type == TransformType.Scale3D || Type == TransformType.Translate3d)
+                if (Has3DPayload(Type))
                 {
                     header += 36;
                 }
-                else if (Type == TransformType.Translate2D || Type == TransformType.Scale2D)
+                else if (Has2DPayload(Type))
                 {
                     header += 24;
                 }
-                else if (Type == TransformType.Opacity)
+                else if (HasOpacityPayload(Type))
                 {
                     header += 8;
                 }
@@ -51,6 +51,30 @@ namespace libmsstyle
 
                 return header;
             }
+        }
+
+        private static bool Has3DPayload(TransformType type)
+        {
+            return type == TransformType.Roatate3D
+                || type == TransformType.Scale3D
+                || type == TransformType.Translate3d
+                // Windows 8 pre-release builds (e.g. 7989) used these lower ids
+                // for the same 3D transform structures.
+                || type == TransformType.Rotate3D_EarlyWin8
+                || type == TransformType.Scale3D_EarlyWin8
+                || type == TransformType.Translate3D_EarlyWin8;
+        }
+
+        private static bool Has2DPayload(TransformType type)
+        {
+            return type == TransformType.Translate2D || type == TransformType.Scale2D;
+        }
+
+        private static bool HasOpacityPayload(TransformType type)
+        {
+            return type == TransformType.Opacity
+                // Same two-float opacity structure, used before the id became 2.
+                || type == TransformType.Opacity_EarlyWin8;
         }
         public Transform()
         {
@@ -67,17 +91,17 @@ namespace libmsstyle
             DurationTime = BitConverter.ToInt32(data, start + 12);
             Flags = (TransformFlag)BitConverter.ToInt32(data, start + 16);
             start += 20;
-            if (Type == TransformType.Roatate3D || Type == TransformType.Scale3D || Type == TransformType.Translate3d)
+            if (Has3DPayload(Type))
             {
                 Transform3DStructure = new Transform3D(data, start);
                 start += 36;
             }
-            else if (Type == TransformType.Translate2D || Type == TransformType.Scale2D)
+            else if (Has2DPayload(Type))
             {
                 Transform2DStructure = new Transform2D(data, start);
                 start += 24;
             }
-            else if (Type == TransformType.Opacity)
+            else if (HasOpacityPayload(Type))
             {
                 TransformOpacity = new TransformOpacity(data, start);
                 start += 8;
@@ -96,15 +120,15 @@ namespace libmsstyle
             bw.Write(DurationTime);
             bw.Write((int)Flags);
 
-            if (Type == TransformType.Roatate3D || Type == TransformType.Scale3D || Type == TransformType.Translate3d)
+            if (Has3DPayload(Type))
             {
                 Transform3DStructure.Write(bw);
             }
-            else if (Type == TransformType.Translate2D || Type == TransformType.Scale2D)
+            else if (Has2DPayload(Type))
             {
                 Transform2DStructure.Write(bw);
             }
-            else if (Type == TransformType.Opacity)
+            else if (HasOpacityPayload(Type))
             {
                 TransformOpacity.Write(bw);
             }
@@ -126,6 +150,14 @@ namespace libmsstyle
         Scale2D = 1,
         Opacity = 2,
         Clip = 3,
+
+        // Windows 8 pre-release builds (e.g. 7989) used these ids before the
+        // 3D transforms moved to 258-260 and opacity moved to 2.
+        Translate3D_EarlyWin8 = 4,
+        Scale3D_EarlyWin8 = 5,
+        Rotate3D_EarlyWin8 = 6,
+        Opacity_EarlyWin8 = 8,
+
         Translate3d = 258,
         Scale3D = 259,
         Roatate3D = 260,

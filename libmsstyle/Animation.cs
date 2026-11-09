@@ -13,6 +13,10 @@ namespace libmsstyle
         public int SizeInBytes;
         public int PropertiesIndex;
         public int TransformsIndex;
+        // Pre-Windows 10 styles left build-machine memory in these padding gaps.
+        // Keep the raw values so a no-op save stays byte-identical.
+        public int HeaderPadding;
+        public int PropertiesPadding;
 
         public AnimationFlags AnimationFlags { get; set; }
         public int TransformCount { get; set; }
@@ -33,6 +37,7 @@ namespace libmsstyle
             SizeInBytes = BitConverter.ToInt32(data, start + 0); //copy of sizeInBytes of the VS record
             PropertiesIndex = BitConverter.ToInt32(data, start + 4);
             TransformsIndex = BitConverter.ToInt32(data, start + 8);
+            HeaderPadding = BitConverter.ToInt32(data, start + 12);
             start += 16; //skip past padding
 
             //Read properties structure
@@ -45,6 +50,7 @@ namespace libmsstyle
             BackgroundPartID = BitConverter.ToInt32(data, start + 24);
             TuningLevel = BitConverter.ToInt32(data, start + 28);
             Perspective = BitConverter.ToSingle(data, start + 32);
+            PropertiesPadding = BitConverter.ToInt32(data, start + 36);
 
             start += 40; //skip past padding
 
@@ -97,9 +103,9 @@ namespace libmsstyle
 
             // Write animation header
             bw.Write(Header.sizeInBytes);
-            bw.Write(16); // Property index (always seems to be the same)
-            bw.Write(56);
-            bw.Write(0);
+            bw.Write(PropertiesIndex);
+            bw.Write(TransformsIndex);
+            bw.Write(HeaderPadding);
 
             // Write animation structure
             bw.Write((int)AnimationFlags);
@@ -111,7 +117,7 @@ namespace libmsstyle
             bw.Write(BackgroundPartID);
             bw.Write(TuningLevel);
             bw.Write(Perspective);
-            bw.Write(0); //Write padding
+            bw.Write(PropertiesPadding);
 
             foreach (var item in Transforms)
             {

@@ -1246,6 +1246,7 @@ namespace libmsstyle
             bool foundDWMTouch = false;
             bool foundDWMPen = false;
             bool foundW8Taskband = false;
+            bool foundW8RedpillDwm = false;
             bool foundVistaQueryBuilder = false;
             bool foundTaskBand2Light_Taskband2 = false;
 
@@ -1263,6 +1264,12 @@ namespace libmsstyle
                 {
                     foundW8Taskband = true; continue;
                 }
+                // The redpill DWM class existed in the Windows 8 pre-release builds
+                // (e.g. 7989) before DWMTouch/DWMPen were carried into Windows 10.
+                if (cls.Value.ClassName == "W8:DWMWindow")
+                {
+                    foundW8RedpillDwm = true; continue;
+                }
                 if (cls.Value.ClassName == "QueryBuilder")
                 {
                     foundVistaQueryBuilder = true; continue;
@@ -1275,7 +1282,7 @@ namespace libmsstyle
 
             if (foundTaskBand2Light_Taskband2)
                 return Platform.Win11;
-            else if (foundW8Taskband)
+            else if (foundW8Taskband || foundW8RedpillDwm)
                 return Platform.Win81;
             else if (foundDWMTouch || foundDWMPen)
                 return Platform.Win10;
